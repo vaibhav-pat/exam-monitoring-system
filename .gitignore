@@ -1,3 +1,25 @@
+# Python
 __pycache__/
 *.pyc
-.env
+*.pyo
+
+# Virtual Environment
+venv/
+
+# Databases
+*.db
+
+# Large Data files
+*.dat
+*.dat.bz2
+dump.rdb
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+
+# OS junk
+.DS_Store
+Thumbs.db
