@@ -1,0 +1,141 @@
+<h2>Exam Session Review</h2>
+
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5>Session Details</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Student:</strong> {{ session.student.username }}</p>
+                <p><strong>Exam:</strong> {{ session.exam.title }}</p>
+                <p><strong>Start Time:</strong> {{ session.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                <p><strong>End Time:</strong> {{ session.end_time.strftime('%Y-%m-%d %H:%M:%S') if session.end_time else
+                    'In Progress' }}</p>
+                <p><strong>Status:</strong>
+                    {% if session.status == 'completed' %}
+                    <span class="badge bg-success">{{ session.status }}</span>
+                    {% elif session.status == 'in_progress' %}
+                    <span class="badge bg-primary">{{ session.status }}</span>
+                    {% else %}
+                    <span class="badge bg-danger">{{ session.status }}</span>
+                    {% endif %}
+                </p>
+                <p><strong>Score:</strong> {{ session.total_score }}% if session.total_score else 'Not Graded' }}</p>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5>Monitoring Logs</h5>
+            </div>
+            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                {% if monitoring_logs %}
+                <div class="timeline">
+                    {% for log in monitoring_logs %}
+                    <div class="alert alert-warning mb-2">
+                        <strong>{{ log.timestamp.strftime('%H:%M:%S') }}</strong> -
+                        {{ log.activity_type.replace('_', ' ').title() }}
+                        <span class="badge bg-danger float-end">{{ "%.2f"|format(log.confidence_score) }}</span>
+                        {% if log.details %}
+                        <br><small>{{ log.details }}</small>
+                        {% endif %}
+                        {% if log.video_frame_path %}
+                        <br><a href="{{ url_for('static', filename='uploads/evidence/' + log.video_frame_path) }}"
+                            target="_blank" class="btn btn-sm btn-info mt-1">View Evidence</a>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p>No monitoring alerts for this session.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <button class="btn btn-primary w-100 mb-2" onclick="gradeExam()">Grade Exam</button>
+                <button class="btn btn-warning w-100 mb-2" onclick="flagSession()">Flag for Review</button>
+                <button class="btn btn-success w-100" onclick="approveSession()">Approve Session</button>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5>Summary</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="alertChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Create monitoring alert chart
+    const ctx = document.getElementById('alertChart').getContext('2d');
+    const alertData = {
+    {% set alert_types = {} %}
+    {% for log in monitoring_logs %}
+    {% if log.activity_type in alert_types %}
+    {% set _ = alert_types.update({ log.activity_type: alert_types[log.activity_type] + 1 }) %}
+    {% else %}
+    {% set _ = alert_types.update({ log.activity_type: 1}) %}
+    {% endif %}
+    {% endfor %}
+    labels: { { alert_types.keys() | list | tojson } },
+    datasets: [{
+        data: {{ alert_types.values() | list | tojson }},
+        backgroundColor: [
+        '#dc3545', '#ffc107', '#28a745', '#17a2b8', '#6c757d'
+    ]
+    }]
+};
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: alertData,
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                }
+            }
+        }
+    });
+
+    function gradeExam() {
+        fetch(`/api/grade_exam`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                session_id: {{ session.id }}
+        })
+    })
+    .then(response => response.json())
+        .then(data => {
+            alert('Exam graded successfully!');
+            location.reload();
+        });
+}
+
+    function flagSession() {
+        // Implementation for flagging session
+        alert('Session flagged for review');
+    }
+
+    function approveSession() {
+        // Implementation for approving session
+        alert('Session approved');
+    }
+</script>

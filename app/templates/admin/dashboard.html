@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-card h3 {
+        font-size: 2.5em;
+        font-weight: bold;
+        margin: 0;
+    }
+
+    .table-container {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .suspicion-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.85em;
+        font-weight: bold;
+    }
+
+    .suspicion-low {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .suspicion-medium {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .suspicion-high {
+        background: #f8d7da;
+        color: #721c24;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Exam Monitoring Dashboard</h1>
+
+<!-- Statistics Cards -->
+<div class="row mt-4">
+    <div class="col-md-3">
+        <div class="stat-card bg-primary text-white">
+            <h6>Active Exams</h6>
+            <h3>{{ stats.active_exams }}</h3>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card bg-success text-white">
+            <h6>Students Online</h6>
+            <h3>{{ stats.students_online }}</h3>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card bg-warning text-white">
+            <h6>Warnings Today</h6>
+            <h3>{{ stats.warnings_today }}</h3>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card bg-info text-white">
+            <h6>Avg. Score</h6>
+            <h3>{{ "%.1f"|format(stats.average_score) }}%</h3>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Exam Sessions -->
+<div class="table-container mt-4">
+    <h4>Recent Exam Sessions</h4>
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>Exam</th>
+                <th>Start Time</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Suspicion Level</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for session in recent_sessions %}
+            <tr>
+                <td>{{ session.student.username }}</td>
+                <td>{{ session.exam.title }}</td>
+                <td>{{ session.start_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    {% if session.status == 'completed' %}
+                    <span class="badge bg-success">Completed</span>
+                    {% elif session.status == 'in_progress' %}
+                    <span class="badge bg-primary">In Progress</span>
+                    {% else %}
+                    <span class="badge bg-danger">Terminated</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if session.total_score %}
+                    {{ session.total_score }}%
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>
+                    {% set suspicion_level = session.monitoring_logs.count() %}
+                    {% if suspicion_level < 3 %} <span class="suspicion-badge suspicion-low">Low</span>
+                        {% elif suspicion_level < 10 %} <span class="suspicion-badge suspicion-medium">Medium</span>
+                            {% else %}
+                            <span class="suspicion-badge suspicion-high">High</span>
+                            {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('admin.review_session', session_id=session.id) }}"
+                        class="btn btn-sm btn-primary">Review</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Real-time Monitoring -->
+<div class="table-container mt-4">
+    <h4>Live Monitoring Alerts</h4>
+    <div id="liveAlerts" style="max-height: 300px; overflow-y: auto;">
+        <!-- Live alerts will be inserted here -->
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Connect to Socket.IO for real-time updates
+    const socket = io();
+
+    socket.on('connect', () => {
+        socket.emit('join_admin');
+    });
+
+    socket.on('monitoring_alert', (data) => {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-warning alert-dismissible fade show';
+        alertDiv.innerHTML = `
+        <strong>${data.student_name}</strong> - ${data.activity_type}: ${data.details}
+        <small class="text-muted">${new Date(data.timestamp).toLocaleTimeString()}</small>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+        const alertsContainer = document.getElementById('liveAlerts');
+        alertsContainer.insertBefore(alertDiv, alertsContainer.firstChild);
+
+        // Keep only last 10 alerts
+        while (alertsContainer.children.length > 10) {
+            alertsContainer.removeChild(alertsContainer.lastChild);
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,316 @@
+<style>
+    #video-container {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        width: 200px;
+        height: 150px;
+        border: 2px solid #333;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #000;
+        z-index: 1000;
+    }
+
+    #localVideo {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .monitoring-status {
+        position: fixed;
+        top: 240px;
+        right: 20px;
+        width: 200px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        font-size: 0.9em;
+    }
+
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+
+    .status-active {
+        background-color: #28a745;
+    }
+
+    .status-warning {
+        background-color: #ffc107;
+    }
+
+    .status-error {
+        background-color: #dc3545;
+    }
+
+    .question-container {
+        margin-bottom: 30px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .timer {
+        position: fixed;
+        top: 80px;
+        left: 20px;
+        font-size: 1.5em;
+        font-weight: bold;
+        padding: 10px 20px;
+        background: #007bff;
+        color: white;
+        border-radius: 8px;
+    }
+</style>
+
+{% block content %}
+<div class="row">
+    <div class="col-md-9">
+        <h2>{{ exam.title }}</h2>
+        <p>{{ exam.description }}</p>
+
+        <form id="examForm" method="POST" action="{{ url_for('exam.submit', exam_id=exam.id) }}">
+            {{ form.hidden_tag() }}
+
+            {% for question in questions %}
+            <div class="question-container">
+                <h5>Question {{ loop.index }} ({{ question.max_score }} points)</h5>
+                <p>{{ question.question_text }}</p>
+
+                {% if question.question_type == 'objective' %}
+                <input type="text" class="form-control" name="answer_{{ question.id }}" placeholder="Your answer"
+                    required>
+                {% else %}
+                <textarea class="form-control" name="answer_{{ question.id }}" rows="5" placeholder="Your answer"
+                    required></textarea>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <button type="submit" class="btn btn-primary btn-lg">Submit Exam</button>
+        </form>
+    </div>
+</div>
+
+<!-- Video Monitoring Container -->
+<div id="video-container">
+    <video id="localVideo" autoplay muted></video>
+</div>
+
+<!-- Monitoring Status -->
+<div class="monitoring-status">
+    <h6>Monitoring Status</h6>
+    <div><span class="status-indicator status-active"></span> Camera: <span id="cameraStatus">Active</span></div>
+    <div><span class="status-indicator status-active"></span> Audio: <span id="audioStatus">Active</span></div>
+    <div class="mt-2">
+        <small>Warnings: <span id="warningCount">0</span></small>
+    </div>
+</div>
+
+<!-- Timer -->
+<div class="timer" id="examTimer">
+    Time Left: <span id="timeRemaining">--:--</span>
+</div>
+
+<!-- Warning Modal -->
+<div class="modal fade" id="warningModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">Warning</h5>
+            </div>
+            <div class="modal-body" id="warningMessage">
+                <!-- Warning message will be inserted here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Understood</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Exam monitoring script
+    let localStream;
+    let socket;
+    let examDuration = {{exam.duration_minutes | tojson}} * 60; // Convert to seconds
+    let timeLeft = examDuration;
+    let warningCount = 0;
+    let sessionId = {{ session.id | tojson}};
+
+    // Initialize timer
+    function startTimer() {
+        const timerInterval = setInterval(() => {
+            timeLeft--;
+
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            document.getElementById('timeRemaining').textContent =
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                document.getElementById('examForm').submit();
+            }
+        }, 1000);
+    }
+
+    // Initialize webcam and microphone
+    async function initializeMedia() {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: true
+            });
+
+            document.getElementById('localVideo').srcObject = localStream;
+
+            // Initialize Socket.IO connection
+            initializeSocket();
+
+            // Start monitoring
+            startMonitoring();
+
+        } catch (error) {
+            console.error('Error accessing media devices:', error);
+            alert('Camera and microphone access is required for the exam. Please enable permissions.');
+            window.location.href = '/';
+        }
+    }
+
+    // Initialize Socket.IO
+    function initializeSocket() {
+        socket = io();
+
+        socket.on('connect', () => {
+            console.log('Connected to monitoring server');
+            socket.emit('join_exam', { session_id: sessionId });
+        });
+
+        socket.on('warning', (data) => {
+            handleWarning(data);
+        });
+
+        socket.on('terminate_exam', (data) => {
+            alert('Your exam has been terminated due to suspicious activity.');
+            document.getElementById('examForm').submit();
+        });
+    }
+
+    // Start monitoring
+    function startMonitoring() {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        const video = document.getElementById('localVideo');
+
+        // Capture and send frames
+        setInterval(() => {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                context.drawImage(video, 0, 0);
+
+                canvas.toBlob((blob) => {
+                    socket.emit('video_frame', {
+                        session_id: sessionId,
+                        frame: blob,
+                        timestamp: new Date().toISOString()
+                    });
+                }, 'image/jpeg', 0.7);
+            }
+        }, 2000); // Send frame every 2 seconds
+
+        // Capture and send audio
+        startAudioMonitoring();
+    }
+
+    // Audio monitoring
+    function startAudioMonitoring() {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        const microphone = audioContext.createMediaStreamSource(localStream);
+        const scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
+
+        analyser.smoothingTimeConstant = 0.8;
+        analyser.fftSize = 1024;
+
+        microphone.connect(analyser);
+        analyser.connect(scriptProcessor);
+        scriptProcessor.connect(audioContext.destination);
+
+        scriptProcessor.onaudioprocess = () => {
+            const array = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(array);
+            const average = array.reduce((a, b) => a + b) / array.length;
+
+            // Send audio level data
+            socket.emit('audio_data', {
+                session_id: sessionId,
+                audio_level: average,
+                timestamp: new Date().toISOString()
+            });
+        };
+    }
+
+    // Handle warnings
+    function handleWarning(data) {
+        warningCount++;
+        document.getElementById('warningCount').textContent = warningCount;
+
+        // Show warning modal
+        document.getElementById('warningMessage').textContent = data.message;
+        const modal = new bootstrap.Modal(document.getElementById('warningModal'));
+        modal.show();
+
+        // Update status indicators
+        if (data.type === 'camera') {
+            document.getElementById('cameraStatus').textContent = 'Warning';
+            document.querySelector('.monitoring-status .status-indicator').classList.remove('status-active');
+            document.querySelector('.monitoring-status .status-indicator').classList.add('status-warning');
+        }
+    }
+
+    // Prevent right-click
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // Prevent copy/paste
+    document.addEventListener('copy', (e) => e.preventDefault());
+    document.addEventListener('paste', (e) => e.preventDefault());
+
+    // Detect tab switching
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            socket.emit('tab_switch', {
+                session_id: sessionId,
+                timestamp: new Date().toISOString()
+            });
+        }
+    });
+
+    // Initialize everything when page loads
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeMedia();
+        startTimer();
+    });
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', (e) => {
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+        }
+        if (socket) {
+            socket.disconnect();
+        }
+    });
+</script>
