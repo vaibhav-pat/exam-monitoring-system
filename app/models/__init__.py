@@ -1,9 +1,20 @@
 import os
 from dotenv import load_dotenv
+from .user import User
+from .exam import Exam, Question, ExamSession, Answer
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '..', '.env'))
 
+__all__ = [
+    'User',
+    'Exam',
+    'Question',
+    'ExamSession',
+    'Answer',
+    'MonitoringLog',
+    'SystemLog'
+]
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     

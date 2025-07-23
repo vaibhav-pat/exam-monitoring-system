@@ -1,23 +1,24 @@
-from app import db
+from .. import db # Correct relative import
 from datetime import datetime
-import json
 
 class Exam(db.Model):
     __tablename__ = 'exams'
     
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
-    description = db.Column(db.Text)
+    description = db.Column(db.Text) # Added description back
     duration_minutes = db.Column(db.Integer, default=60)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    start_time = db.Column(db.DateTime)
-    end_time = db.Column(db.DateTime)
-    is_active = db.Column(db.Boolean, default=True)
     
-    # Relationships
-    questions = db.relationship('Question', backref='exam', lazy='dynamic', cascade='all, delete-orphan')
-    sessions = db.relationship('ExamSession', backref='exam', lazy='dynamic')
+    # --- THIS IS THE FIX ---
+    # Add the missing is_active column
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    
+    # --- RELATIONSHIPS ---
+    creator = db.relationship("app.models.user.User", back_populates="exams_created")
+    questions = db.relationship("app.models.exam.Question", back_populates="exam", cascade="all, delete-orphan")
+    sessions = db.relationship("app.models.exam.ExamSession", back_populates="exam", cascade="all, delete-orphan")
 
 class Question(db.Model):
     __tablename__ = 'questions'
@@ -25,12 +26,15 @@ class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     exam_id = db.Column(db.Integer, db.ForeignKey('exams.id'))
     question_text = db.Column(db.Text, nullable=False)
-    question_type = db.Column(db.String(20))  # 'subjective', 'objective'
-    correct_answer = db.Column(db.Text)  # For objective questions
-    answer_key = db.Column(db.Text)  # Model answer for subjective questions
-    rubric = db.Column(db.Text)  # JSON string containing grading rubric
-    max_score = db.Column(db.Float, default=10.0)
-    order = db.Column(db.Integer, default=0)
+    question_type = db.Column(db.String(20), default='subjective') # Added back
+    correct_answer = db.Column(db.Text) # Added back
+    answer_key = db.Column(db.Text) # Added back
+    max_score = db.Column(db.Float, default=10.0) # Added back
+    order = db.Column(db.Integer, default=0) # Added back
+    
+    # --- RELATIONSHIPS ---
+    exam = db.relationship("app.models.exam.Exam", back_populates="questions")
+    answers = db.relationship("app.models.exam.Answer", back_populates="question", cascade="all, delete-orphan")
 
 class ExamSession(db.Model):
     __tablename__ = 'exam_sessions'
@@ -40,12 +44,14 @@ class ExamSession(db.Model):
     student_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     end_time = db.Column(db.DateTime)
-    status = db.Column(db.String(20), default='in_progress')  # in_progress, completed, terminated
-    total_score = db.Column(db.Float)
+    status = db.Column(db.String(20), default='in_progress')
+    total_score = db.Column(db.Float) # Added back
     
-    # Relationships
-    answers = db.relationship('Answer', backref='session', lazy='dynamic', cascade='all, delete-orphan')
-    monitoring_logs = db.relationship('MonitoringLog', backref='session', lazy='dynamic', cascade='all, delete-orphan')
+    # --- RELATIONSHIPS ---
+    exam = db.relationship("app.models.exam.Exam", back_populates="sessions")
+    student = db.relationship("app.models.user.User", back_populates="exam_sessions")
+    answers = db.relationship("app.models.exam.Answer", back_populates="session", cascade="all, delete-orphan")
+    monitoring_logs = db.relationship("app.models.monitoring.MonitoringLog", back_populates="session", cascade="all, delete-orphan")
 
 class Answer(db.Model):
     __tablename__ = 'answers'
@@ -54,9 +60,9 @@ class Answer(db.Model):
     session_id = db.Column(db.Integer, db.ForeignKey('exam_sessions.id'))
     question_id = db.Column(db.Integer, db.ForeignKey('questions.id'))
     answer_text = db.Column(db.Text)
-    auto_score = db.Column(db.Float)
-    manual_score = db.Column(db.Float)
-    feedback = db.Column(db.Text)
-    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+    auto_score = db.Column(db.Float) # Added back
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow) # Added back
     
-    question = db.relationship('Question', backref='answers')
+    # --- RELATIONSHGIPS ---
+    session = db.relationship("app.models.exam.ExamSession", back_populates="answers")
+    question = db.relationship("app.models.exam.Question", back_populates="answers")

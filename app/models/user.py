@@ -1,5 +1,4 @@
-# app/models/user.py - Fixed version
-from app import db, login_manager
+from .. import db # Correct relative import
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
@@ -11,26 +10,21 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(64), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
-    role = db.Column(db.String(20), default='student')  # student, instructor, admin
+    role = db.Column(db.String(20), default='student')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relationships - using string references to avoid circular imports
-    exams_created = db.relationship('Exam', backref='creator', lazy='dynamic',
-                                   foreign_keys='Exam.created_by')
-    exam_sessions = db.relationship('ExamSession', backref='student', lazy='dynamic')
+    # --- RELATIONSHIPS USING FULLY QUALIFIED STRINGS ---
+    # A user can create many exams
+    exams_created = db.relationship("app.models.exam.Exam", back_populates="creator")
+    # A user can have many exam sessions
+    exam_sessions = db.relationship("app.models.exam.ExamSession", back_populates="student")
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
     
     def check_password(self, password):
+        if not self.password_hash: return False
         return check_password_hash(self.password_hash, password)
     
     def is_instructor(self):
         return self.role in ['instructor', 'admin']
-    
-    def __repr__(self):
-        return f'<User {self.username}>'
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))

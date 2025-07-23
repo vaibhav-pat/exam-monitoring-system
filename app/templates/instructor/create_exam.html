@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Create a New Exam{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="row">
+        <div class="col-md-10 offset-md-1">
+            <h2>Create a New Exam</h2>
+            <hr>
+
+            <!-- The main form that will submit all exam data -->
+            <form method="POST" action="{{ url_for('exam.create_exam') }}">
+
+                <!-- Section for Exam Details -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4>Exam Details</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Exam Title</label>
+                            <input type="text" class="form-control" id="title" name="title"
+                                placeholder="e.g., Final Python Programming Exam" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3"
+                                placeholder="A brief description of the exam content and rules."></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="duration_minutes" class="form-label">Duration (in minutes)</label>
+                            <input type="number" class="form-control" id="duration_minutes" name="duration_minutes"
+                                value="60" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section for Questions -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h4>Questions</h4>
+                        <button type="button" id="add-question-btn" class="btn btn-sm btn-success">Add Question</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="questions-container">
+                            <!-- JavaScript will add question fields here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">Save Exam</button>
+                    <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary btn-lg">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const addQuestionBtn = document.getElementById('add-question-btn');
+        const questionsContainer = document.getElementById('questions-container');
+        let questionCounter = 0;
+
+        addQuestionBtn.addEventListener('click', function () {
+            questionCounter++;
+
+            const questionDiv = document.createElement('div');
+            questionDiv.classList.add('question-block', 'p-3', 'mb-3', 'border', 'rounded');
+            questionDiv.innerHTML = `
+                <h5>Question ${questionCounter}</h5>
+                <div class="mb-2">
+                    <label for="question_text_${questionCounter}" class="form-label">Question Text</label>
+                    <textarea class="form-control" id="question_text_${questionCounter}" name="questions-${questionCounter}-question_text" rows="2" required></textarea>
+                </div>
+                <div class="mb-2">
+                    <label for="correct_answer_${questionCounter}" class="form-label">Model Answer (for auto-grading)</label>
+                    <textarea class="form-control" id="correct_answer_${questionCounter}" name="questions-${questionCounter}-correct_answer" rows="3" required></textarea>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="max_score_${questionCounter}" class="form-label">Max Score</label>
+                        <input type="number" class="form-control" id="max_score_${questionCounter}" name="questions-${questionCounter}-max_score" value="10" required>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-danger mt-2" onclick="this.parentElement.remove()">Remove Question</button>
+            `;
+
+            questionsContainer.appendChild(questionDiv);
+        });
+    });
+</script>
+{% endblock %}
